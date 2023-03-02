@@ -1,4 +1,4 @@
-# Artefact's Custom Sankee
+# Artefact's Custom Sankey
 
 ## Installation
 
@@ -18,6 +18,6 @@ yarn build
 # Create your SSL certificates if not done
 openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem
 
-# Serve on https. File is available @ https://127.0.0.1:8080/sankee.js
+# Serve on https. File is available @ https://127.0.0.1:8080/sankey.js
 yarn serve
 ```

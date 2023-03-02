@@ -1,9 +1,9 @@
 {
-  "label": "Artefact's Custom Sankee",
+  "label": "Artefact's Custom Sankey",
   "category_label": "Visualizations",
   "branding": {
     "image_uri": "https://www.techforretail.com/wp-content/uploads/2021/07/artefact.png",
-    "tagline": "Artefact's Custom Sankee"
+    "tagline": "Artefact's Custom Sankey"
   },
   "constants": {
     "VIS_LABEL": {

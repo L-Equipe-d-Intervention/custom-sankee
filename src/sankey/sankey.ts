@@ -1,6 +1,7 @@
 import * as d3 from "d3";
 import { sankey, sankeyLinkHorizontal, sankeyLeft } from "d3-sankey";
 import { handleErrors } from "../common/utils";
+import colors from "../common/colors.json";
 
 import {
   Cell,
@@ -9,6 +10,11 @@ import {
   LookerChartUtils,
   VisualizationDefinition,
 } from "../types/types";
+
+interface SankeyCell extends Cell {
+  depth: number;
+  name: string;
+}
 
 // Global values provided via the API
 declare var looker: Looker;
@@ -45,7 +51,7 @@ const vis: Sankey = {
       values: [
         { Name: "name" },
         { "Name (value)": "name_value" },
-        { "Name (percentage)": "name_percentage" },
+        { "Name: value (percentage)": "name_value_percentage" },
       ],
     },
     show_null_points: {
@@ -98,8 +104,20 @@ const vis: Sankey = {
     // `no-inferred-empty-object-type  Explicit type parameter needs to be provided to the function call`
     // https://stackoverflow.com/questions/31564730/typescript-with-d3js-with-definitlytyped
     const color = d3
-      .scaleOrdinal<string[], string[]>()
+      .scaleOrdinal<string, string>()
       .range(config.color_range || vis.options.color_range.default);
+
+    const getColorFromSankeyNode = (node: { depth: number; name: string }) => {
+      if (dimensions.length > node.depth) {
+        const dimensionKey = dimensions[node.depth].name as keyof typeof colors;
+        const dimensionColors = colors[dimensionKey];
+        const dimensionValue = node.name as keyof typeof dimensionColors;
+        if (colors[dimensionKey] && colors[dimensionKey][dimensionValue]) {
+          return colors[dimensionKey][dimensionValue];
+        }
+      }
+      return color(node.name);
+    };
 
     const sankeyInst = sankey()
       .nodeAlign(sankeyLeft)
@@ -125,7 +143,7 @@ const vis: Sankey = {
       .append("g")
       .attr("class", "nodes")
       .attr("font-family", "sans-serif")
-      .attr("font-size", 10)
+      .attr("font-size", 14)
       .selectAll("g");
 
     const graph: any = {
@@ -173,7 +191,7 @@ const vis: Sankey = {
 
     const nodesArray = Array.from(nodes);
 
-    graph.links.forEach(function (d: Cell) {
+    graph.links.forEach(function (d: SankeyCell) {
       d.source = nodesArray.indexOf(d.source);
       d.target = nodesArray.indexOf(d.target);
     });
@@ -195,10 +213,10 @@ const vis: Sankey = {
         return "M" + -10 + "," + -10 + sankeyLinkHorizontal()(d);
       })
       .style("opacity", 0.4)
-      .attr("stroke-width", function (d: Cell) {
+      .attr("stroke-width", function (d: SankeyCell) {
         return Math.max(1, d.width);
       })
-      .on("mouseenter", function (this: any, d: Cell) {
+      .on("mouseenter", function (this: any, d: SankeyCell) {
         svg.selectAll(".link").style("opacity", 0.05);
         d3.select(this).style("opacity", 0.7);
         svg.selectAll(".node").style("opacity", function (p: any) {
@@ -207,7 +225,7 @@ const vis: Sankey = {
           return 0.5;
         });
       })
-      .on("click", function (e: any, d: Cell) {
+      .on("click", function (e: any, d: SankeyCell) {
         // Add drill menu event
         const coords = d3.pointer(e);
         const event: object = { pageX: coords[0], pageY: coords[1] };
@@ -221,8 +239,8 @@ const vis: Sankey = {
         d3.selectAll(".link").style("opacity", 0.4);
       });
 
-    link.style("stroke", function (d: Cell) {
-      return color(d.source.name);
+    link.style("stroke", function (d: SankeyCell) {
+      return getColorFromSankeyNode(d.source);
     });
 
     node = node
@@ -230,7 +248,7 @@ const vis: Sankey = {
       .enter()
       .append("g")
       .attr("class", "node")
-      .on("mouseenter", function (d: Cell) {
+      .on("mouseenter", function (d: SankeyCell) {
         svg.selectAll(".link").style("opacity", function (p: any) {
           if (p.source === d) return 0.7;
           if (p.target === d) return 0.7;
@@ -243,56 +261,58 @@ const vis: Sankey = {
 
     node
       .append("rect")
-      .attr("x", function (d: Cell) {
+      .attr("x", function (d: SankeyCell) {
         return d.x0;
       })
-      .attr("y", function (d: Cell) {
+      .attr("y", function (d: SankeyCell) {
         return d.y0;
       })
-      .attr("height", function (d: Cell) {
+      .attr("height", function (d: SankeyCell) {
         return Math.abs(d.y1 - d.y0);
       })
-      .attr("width", function (d: Cell) {
+      .attr("width", function (d: SankeyCell) {
         return Math.abs(d.x1 - d.x0);
       })
-      .attr("fill", function (d: Cell) {
-        return color(d.name);
+      .attr("fill", function (d: SankeyCell) {
+        return getColorFromSankeyNode(d);
       })
       .attr("stroke", "#555");
 
     node
       .append("text")
-      .attr("x", function (d: Cell) {
+      .attr("x", function (d: SankeyCell) {
         return d.x0 - 6;
       })
-      .attr("y", function (d: Cell) {
+      .attr("y", function (d: SankeyCell) {
         return (d.y1 + d.y0) / 2;
       })
       .attr("dy", "0.35em")
       .style("font-weight", "bold")
       .attr("text-anchor", "end")
       .style("fill", "#222")
-      .text(function (d: Cell) {
+      .text(function (d: SankeyCell) {
         switch (config.label_type) {
           case "name":
             return d.name;
           case "name_value":
-            return `${d.name} (${d.value})`;
-          case "name_percentage":
-            return `${d.name} (${Math.round((100 * d.value) / total)}%)`;
+            return `${d.name} : ${d.value.toLocaleString()}`;
+          case "name_value_percentage":
+            return `${
+              d.name
+            } : ${d.value.toLocaleString()} (${Math.round((100 * d.value) / total)}%)`;
           default:
             return "";
         }
       })
-      .filter(function (d: Cell) {
+      .filter(function (d: SankeyCell) {
         return d.x0 < width / 2;
       })
-      .attr("x", function (d: Cell) {
+      .attr("x", function (d: SankeyCell) {
         return d.x1 + 6;
       })
       .attr("text-anchor", "start");
 
-    node.append("title").text(function (d: Cell) {
+    node.append("title").text(function (d: SankeyCell) {
       return d.name + "\n" + d.value;
     });
     doneRendering();

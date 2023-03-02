@@ -4,7 +4,7 @@ import { resolve } from "path";
 export default {
   build: {
     rollupOptions: {
-      input: [resolve(__dirname, "./src/sankee/sankee.ts")],
+      input: [resolve(__dirname, "./src/sankey/sankey.ts")],
       output: {
         dir: __dirname,
         entryFileNames: `[name].js`,
