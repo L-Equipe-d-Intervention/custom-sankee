@@ -12,6 +12,6 @@ constant: VIS_ID {
 
 visualization: {
   id: "@{VIS_ID}"
-  file: "sankey.js"
+  file: "sankee.js"
   label: "@{VIS_LABEL}"
 }
