@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "serve": "http-server ./dist -S -C cert.pem",
+    "serve": "http-server -S -C cert.pem",
     "build": "tsc && vite build"
   },
   "devDependencies": {
