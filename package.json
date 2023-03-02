@@ -1,0 +1,22 @@
+{
+  "name": "vite-artefact-visualizations",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "serve": "http-server ./dist -S -C cert.pem",
+    "build": "tsc && vite build"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "typescript": "^4.9.3",
+    "vite": "^4.1.0"
+  },
+  "dependencies": {
+    "@types/d3": "^7.4.0",
+    "@types/d3-sankey": "^0.12.1",
+    "d3": "^7.8.2",
+    "d3-sankey": "^0.12.1"
+  }
+}
