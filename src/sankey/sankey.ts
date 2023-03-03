@@ -74,7 +74,6 @@ const vis: Sankey = {
   },
   // Render in response to the data or settings changing
   updateAsync(data, element, config, queryResponse, _details, doneRendering) {
-    console.log(data, element, config, queryResponse, _details, doneRendering);
     if (
       !handleErrors(this, queryResponse, {
         min_pivots: 0,
@@ -291,7 +290,7 @@ const vis: Sankey = {
       .attr("text-anchor", "end")
       .style("fill", "#222")
       .text(function (d: SankeyCell) {
-        switch (config.label_type) {
+        switch (config.label_type || vis.options.label_type.default) {
           case "name":
             return d.name;
           case "name_value":
