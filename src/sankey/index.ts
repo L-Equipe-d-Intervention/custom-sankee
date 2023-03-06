@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import { sankey, sankeyLinkHorizontal, sankeyLeft } from "d3-sankey";
-import { handleErrors } from "../common/utils";
-import colors from "../common/colors.json";
+import { handleErrors } from "../utils";
+import colors from "../colors.json";
 
 import {
   Cell,
@@ -9,7 +9,7 @@ import {
   Looker,
   LookerChartUtils,
   VisualizationDefinition,
-} from "../types/types";
+} from "../types";
 
 interface SankeyCell extends Cell {
   depth: number;
@@ -20,11 +20,11 @@ interface SankeyCell extends Cell {
 declare var looker: Looker;
 declare var LookerCharts: LookerChartUtils;
 
-interface Sankey extends VisualizationDefinition {
+interface Index extends VisualizationDefinition {
   svg?: any;
 }
 
-const vis: Sankey = {
+const vis: Index = {
   id: "sankey", // id/label not required, but nice for testing and keeping manifests in sync
   label: "Sankey",
   options: {

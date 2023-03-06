@@ -4,7 +4,7 @@ import {
   VisConfig,
   VisQueryResponse,
   VisualizationDefinition,
-} from "../types/types";
+} from "./types";
 
 export const formatType = (valueFormat: string) => {
   if (!valueFormat) return undefined;

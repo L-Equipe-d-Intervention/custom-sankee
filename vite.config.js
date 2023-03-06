@@ -1,16 +1,22 @@
+import { defineConfig, loadEnv } from 'vite';
 import { resolve } from "path";
 
-/** @type {import('vite').UserConfig} */
-export default {
-  build: {
-    rollupOptions: {
-      input: [resolve(__dirname, "./src/sankey/sankey.ts")],
-      output: {
-        dir: __dirname,
-        entryFileNames: `[name].js`,
-        chunkFileNames: `[name].js`,
-        assetFileNames: `[name].[ext]`,
+export default ({ mode }) => {
+  const env = {...process.env, ...loadEnv(mode, process.cwd(), "")};
+  const VIZ_NAME = env.VITE_VIZ_NAME
+
+  return defineConfig({
+    build: {
+      emptyOutDir: false,
+      rollupOptions: {
+        input: [resolve(__dirname, "./src/" + VIZ_NAME + "/index.ts")],
+        output: {
+          dir: resolve(__dirname, "./dist"),
+          entryFileNames: `${VIZ_NAME}.js`,
+          chunkFileNames: `[name].js`,
+          assetFileNames: `[name].[ext]`,
+        },
       },
     },
-  },
-};
+  });
+}

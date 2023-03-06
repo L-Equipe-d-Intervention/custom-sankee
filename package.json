@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "serve": "http-server -S -C cert.pem",
-    "build": "tsc && vite build"
+    "build:sankey": "tsc && VITE_VIZ_NAME=sankey vite build",
+    "build:waterfall": "tsc && VITE_VIZ_NAME=waterfall vite build"
   },
   "devDependencies": {
     "http-server": "^14.1.1",
