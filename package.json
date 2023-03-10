@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "serve": "http-server -S -C cert.pem",
+    "serve": "http-server ./dist -S -C cert.pem",
     "build:sankey": "tsc && VITE_VIZ_NAME=sankey vite build",
     "build:waterfall": "tsc && VITE_VIZ_NAME=waterfall vite build"
   },
