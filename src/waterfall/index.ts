@@ -13,7 +13,7 @@ interface Index extends VisualizationDefinition {
 interface Row {
   name: string
   value: number
-  percent: number
+  percent?: number
   rendered: string | Cell
   start?: number
   end?: number
@@ -140,27 +140,27 @@ const vis: Index = {
     //   return color(node.name);
     // };
 
-    const margin = { top: 20, right: 30, bottom: 30, left: 40 }
+    const margin = { top: 20, right: 30, bottom: 20, left: 30 }
     const width = element.clientWidth - margin.left - margin.right
     const height = element.clientHeight - margin.top - margin.bottom
     const padding = 0.3
 
-    const x = d3.scaleBand()
+    const xScale = d3.scaleBand()
       .range([0, width])
       .padding(padding)
 
-    const y = d3.scaleLinear()
+    const yScale = d3.scaleLinear()
       .range([height, 0])
 
-    const xAxis = d3.axisBottom(x)
+    const xAxis = d3.axisBottom(xScale)
 
-    const yAxis = d3.axisLeft(y)
+    const yAxis = d3.axisLeft(yScale)
       .tickFormat(d => humanize(Number(d)))
 
     const svg = this.svg
       .html('')
-      .attr('width', '100%')
-      .attr('height', '100%')
+      .attr('width', element.clientWidth)
+      .attr('height', element.clientHeight)
       .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
@@ -187,7 +187,6 @@ const vis: Index = {
           const block = {
             value,
             name: measure.label_short,
-            percent: 1,
             rendered: rendered || humanize(value),
             class: value >= 0 ? 'positive' : 'negative',
           }
@@ -216,7 +215,6 @@ const vis: Index = {
       computedData.push({
         name: 'Total',
         value: cumulative,
-        percent: 1,
         rendered: humanize(cumulative),
         start: 0,
         end: cumulative,
@@ -224,11 +222,12 @@ const vis: Index = {
       })
     }
 
-    x.domain(computedData.map(d => d.name))
-    y.domain([
+    xScale.domain(computedData.map(d => d.name))
+    yScale.domain([
       d3.min(computedData, d => d.start || 0) || 0,
       d3.max(computedData, d => d.end || d.value) || 0,
     ])
+      .interpolate(d3.interpolateRound)
 
     svg.append('g')
       .attr('class', 'x axis')
@@ -239,29 +238,42 @@ const vis: Index = {
       .attr('class', 'y axis')
       .call(yAxis)
 
+    svg.selectAll('line.horizontalGrid')
+      .data(yScale.ticks())
+      .join('line')
+      .attr('class', 'horizontalGrid')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', (d: number) => yScale(d) + 0.5)
+      .attr('y2', (d: number) => yScale(d) + 0.5)
+      .attr('fill', 'none')
+      .attr('stroke', 'lightgrey')
+      .attr('stroke-width', '1px')
+      .attr('shape-rendering', 'crispEdges')
+
     const bar = svg.selectAll('.bar')
       .data(computedData)
       .join('g')
       .attr('class', (d: Row) => `bar ${d.class}`)
-      .attr('transform', (d: Row) => `translate(${x(d.name)},0)`)
+      .attr('transform', (d: Row) => `translate(${xScale(d.name)},0)`)
 
     bar.append('rect')
-      .attr('y', (d: Row) => y(Math.max(d.start || 0, d.end || d.value)))
-      .attr('height', (d: Row) => Math.abs(y(d.start || 0) - y(d.end || d.value)))
-      .attr('width', x.bandwidth())
+      .attr('y', (d: Row) => yScale(Math.max(d.start || 0, d.end || d.value)))
+      .attr('height', (d: Row) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
+      .attr('width', xScale.bandwidth())
 
     bar.append('text')
-      .attr('x', x.bandwidth() / 2)
-      .attr('y', (d: Row) => y(d.end || d.value) + 5)
+      .attr('x', xScale.bandwidth() / 2)
+      .attr('y', (d: Row) => yScale(d.end || d.value) + 5)
       .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
       .text((d: Row) => textFormatter(d))
 
     bar.filter((d: Row) => d.class !== 'total').append('line')
       .attr('class', 'connector')
-      .attr('x1', x.bandwidth() + 5)
-      .attr('y1', (d: Row) => y(d.end || d.value))
-      .attr('x2', x.bandwidth() / (1 - padding) - 5)
-      .attr('y2', (d: Row) => y(d.end || d.value))
+      .attr('x1', xScale.bandwidth() + 5)
+      .attr('y1', (d: Row) => yScale(d.end || d.value))
+      .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
+      .attr('y2', (d: Row) => yScale(d.end || d.value))
 
 
     function textFormatter(row: Row) {
@@ -269,6 +281,9 @@ const vis: Index = {
         case 'value':
           return `${row.rendered}`
         case 'value_percentage':
+          if (!row.percent) {
+            return row.rendered
+          }
           return `${row.rendered} (${(row.percent * 100).toFixed(2)}%)`
         default:
           return ''
