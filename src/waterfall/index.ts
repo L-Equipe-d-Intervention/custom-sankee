@@ -102,7 +102,9 @@ const vis: Index = {
       }
       
       .axis text {
-        font: 10px sans-serif;
+        font-family: Roboto, "Noto Sans", sans-serif;
+        font-size: 12px;
+        color: #3a4245;
       }
       
       .axis path,
@@ -151,7 +153,7 @@ const vis: Index = {
     //   return color(node.name);
     // };
 
-    const margin = { top: 20, right: 30, bottom: 20, left: 30 }
+    const margin = { top: 20, right: 30, bottom: 20, left: 40 }
     const width = element.clientWidth - margin.left - margin.right
     const height = element.clientHeight - margin.top - margin.bottom
     const padding = 0.3
