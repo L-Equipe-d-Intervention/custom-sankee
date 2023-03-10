@@ -58,6 +58,16 @@ const vis: Index = {
         { 'Value (percentage)': 'value_percentage' },
       ],
     },
+    show_gridlines: {
+      type: 'boolean',
+      label: 'Gridlines',
+      default: true,
+    },
+    show_lines_between_blocks: {
+      type: 'boolean',
+      label: 'Lines between blocks',
+      default: true,
+    },
     show_null_points: {
       type: 'boolean',
       label: 'Plot Null Values',
@@ -80,8 +90,9 @@ const vis: Index = {
       }
       
       .bar line.connector {
-        stroke: grey;
+        stroke: lightgrey;
         stroke-dasharray: 3;
+        stroke-width: 1px;
       }
       
       .bar text {
@@ -238,18 +249,20 @@ const vis: Index = {
       .attr('class', 'y axis')
       .call(yAxis)
 
-    svg.selectAll('line.horizontalGrid')
-      .data(yScale.ticks())
-      .join('line')
-      .attr('class', 'horizontalGrid')
-      .attr('x1', 0)
-      .attr('x2', width)
-      .attr('y1', (d: number) => yScale(d) + 0.5)
-      .attr('y2', (d: number) => yScale(d) + 0.5)
-      .attr('fill', 'none')
-      .attr('stroke', 'lightgrey')
-      .attr('stroke-width', '1px')
-      .attr('shape-rendering', 'crispEdges')
+    if (config.show_gridlines) {
+      svg.selectAll('line.horizontalGrid')
+        .data(yScale.ticks())
+        .join('line')
+        .attr('class', 'horizontalGrid')
+        .attr('x1', 0)
+        .attr('x2', width)
+        .attr('y1', (d: number) => yScale(d) + 0.5)
+        .attr('y2', (d: number) => yScale(d) + 0.5)
+        .attr('fill', 'none')
+        .attr('stroke', 'lightgrey')
+        .attr('stroke-width', '1px')
+        .attr('shape-rendering', 'crispEdges')
+    }
 
     const bar = svg.selectAll('.bar')
       .data(computedData)
@@ -268,12 +281,14 @@ const vis: Index = {
       .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
       .text((d: Row) => textFormatter(d))
 
-    bar.filter((d: Row) => d.class !== 'total').append('line')
-      .attr('class', 'connector')
-      .attr('x1', xScale.bandwidth() + 5)
-      .attr('y1', (d: Row) => yScale(d.end || d.value))
-      .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
-      .attr('y2', (d: Row) => yScale(d.end || d.value))
+    if (config.show_lines_between_blocks) {
+      bar.filter((d: Row) => d.class !== 'total').append('line')
+        .attr('class', 'connector')
+        .attr('x1', xScale.bandwidth() + 5)
+        .attr('y1', (d: Row) => yScale(d.end || d.value))
+        .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
+        .attr('y2', (d: Row) => yScale(d.end || d.value))
+    }
 
 
     function textFormatter(row: Row) {
