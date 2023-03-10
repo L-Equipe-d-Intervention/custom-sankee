@@ -1,7 +1,7 @@
 import * as d3 from 'd3'
 import { handleErrors } from '../utils'
 // import colors from '../colors.json'
-import { Looker, VisualizationDefinition } from '../types'
+import { Cell, Looker, VisualizationDefinition } from '../types'
 
 // Global values provided via the API
 declare const looker: Looker
@@ -10,32 +10,28 @@ interface Index extends VisualizationDefinition {
   svg?: any;
 }
 
-interface FakeRow {
-  value: number
+interface Row {
   name: string
+  value: number
+  percent: number
+  rendered: string | Cell
   start?: number
   end?: number
-  class?: string
+  class: string
 }
 
-const fakeData: FakeRow[] = [
-  {
-    value: 50,
-    name: 'Hello',
-  },
-  {
-    value: 150,
-    name: 'world',
-  },
-  {
-    value: -45,
-    name: 'Antoine',
-  },
-]
+function humanize(n: number): string {
+  n = Math.round(n)
+  let result = '' + n
+  if (Math.abs(n) > 1000) {
+    result = Math.round(n / 1000) + ' K'
+  }
+  return result
+}
 
 const vis: Index = {
-  id: 'waterfall', // id/label not required, but nice for testing and keeping manifests in sync
-  label: 'Waterfall',
+  id: 'custom_waterfall', // id/label not required, but nice for testing and keeping manifests in sync
+  label: 'mROI Waterfall',
   options: {
     color_range: {
       type: 'array',
@@ -53,14 +49,13 @@ const vis: Index = {
       ],
     },
     label_type: {
-      default: 'name',
+      default: 'value',
       display: 'select',
       label: 'Label Type',
       type: 'string',
       values: [
-        { Name: 'name' },
-        { 'Name (value)': 'name_value' },
-        { 'Name: value (percentage)': 'name_value_percentage' },
+        { 'Value': 'value' },
+        { 'Value (percentage)': 'value_percentage' },
       ],
     },
     show_null_points: {
@@ -106,39 +101,25 @@ const vis: Index = {
         shape-rendering: crispEdges;
       }
       </style>
-      <svg class="chart"></svg>
     `
+    this.svg = d3.select(element).append('svg')
   },
   // Render in response to the data or settings changing
   updateAsync(data, element, config, queryResponse, _details, doneRendering) {
+    const { dimensions } = config.query_fields
+    const max_measures = dimensions.length > 0 ? 1 : undefined
+
     if (
       !handleErrors(this, queryResponse, {
         min_pivots: 0,
         max_pivots: 0,
-        min_dimensions: 2,
-        max_dimensions: undefined,
+        min_dimensions: 0,
         min_measures: 1,
-        max_measures: 1,
+        max_measures,
       })
-    )
+    ) {
       return
-
-    console.log(data)
-    console.log(config)
-    console.log(queryResponse)
-
-    const width = element.clientWidth
-    const height = element.clientHeight
-
-    // const svg = this.svg
-    //   .html("")
-    //   .attr("width", "100%")
-    //   .attr("height", "100%")
-    //   .append("g");
-
-    // const dimensions = queryResponse.fields.dimension_like;
-    // const measure = queryResponse.fields.measure_like[0];
-    // const total = d3.sum(data, (d) => d[measure.name]["value"]);
+    }
 
     //  The standard d3.ScaleOrdinal<string, {}>, causes error
     // `no-inferred-empty-object-type  Explicit type parameter needs to be provided to the function call`
@@ -160,111 +141,139 @@ const vis: Index = {
     // };
 
     const margin = { top: 20, right: 30, bottom: 30, left: 40 }
+    const width = element.clientWidth - margin.left - margin.right
+    const height = element.clientHeight - margin.top - margin.bottom
     const padding = 0.3
 
-    const xRange = d3.scaleBand().range([0, width]).padding(padding)
+    const x = d3.scaleBand()
+      .range([0, width])
+      .padding(padding)
 
-    const yRange = d3.scaleLinear()
+    const y = d3.scaleLinear()
       .range([height, 0])
 
-    const xAxis = d3.axisBottom(xRange)
+    const xAxis = d3.axisBottom(x)
 
-    const yAxis = d3.axisLeft(yRange)
-      .tickFormat(function (d) {
-        return dollarFormatter(Number(d))
-      })
+    const yAxis = d3.axisLeft(y)
+      .tickFormat(d => humanize(Number(d)))
 
-    const chart = d3.select('.chart')
-      .attr('width', width + margin.left + margin.right)
-      .attr('height', height + margin.top + margin.bottom)
+    const svg = this.svg
+      .html('')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
       .append('g')
-      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+      .attr('transform', `translate(${margin.left},${margin.top})`)
 
+
+    // 0 dimension + X measures
+    console.log('data', data)
+    console.log('config', config)
+    console.log('fields', queryResponse.fields)
+    const { dimension_like } = queryResponse.fields
+    const { measure_like } = queryResponse.fields
+    const [measure] = measure_like
+    const noDimensions = dimension_like.length <= 0
+    const oneMeasureOnly = measure_like.length === 1
+    const total = d3.sum(data, (d) => d[measure.name]['value'])
 
     // Transform data (i.e., finding cumulative values and total) for easier charting
     let cumulative = 0
-    for (let i = 0; i < fakeData.length; i++) {
-      fakeData[i].start = cumulative
-      cumulative += fakeData[i].value
-      fakeData[i].end = cumulative
+    const computedData: Row[] = []
+    data.forEach(d => {
+      if (noDimensions) {
+        measure_like.forEach(measure => {
+          const { value } = d[measure.name]
+          const block = {
+            value,
+            name: measure.label_short,
+            percent: 1,
+            rendered: rendered || humanize(value),
+            class: value >= 0 ? 'positive' : 'negative',
+          }
+          computedData.push(block)
+        })
+        return
+      }
 
-      fakeData[i].class = (fakeData[i].value >= 0) ? 'positive' : 'negative'
-    }
-    fakeData.push({
-      value: cumulative,
-      name: 'Total',
-      start: 0,
-      end: cumulative,
-      class: 'total',
+      const { value, rendered } = d[measure.name]
+      const name = dimension_like.map(dimension => d[dimension.name].value).filter(Boolean).join(' - ')
+      const block = {
+        name,
+        value,
+        rendered: rendered || humanize(value),
+        start: cumulative,
+        end: cumulative + value,
+        percent: value / total,
+        class: value >= 0 ? 'positive' : 'negative',
+      }
+      cumulative += value
+
+      computedData.push(block)
     })
 
-    xRange.domain(fakeData.map(function (d) {
-      return d.name
-    }))
-    yRange.domain([0, d3.max(fakeData, (d) => {
-      return d.end
-    }) || 0])
+    if (oneMeasureOnly) {
+      computedData.push({
+        name: 'Total',
+        value: cumulative,
+        percent: 1,
+        rendered: humanize(cumulative),
+        start: 0,
+        end: cumulative,
+        class: 'total',
+      })
+    }
 
-    chart.append('g')
+    x.domain(computedData.map(d => d.name))
+    y.domain([
+      d3.min(computedData, d => d.start || 0) || 0,
+      d3.max(computedData, d => d.end || d.value) || 0,
+    ])
+
+    svg.append('g')
       .attr('class', 'x axis')
-      .attr('transform', 'translate(0,' + height + ')')
+      .attr('transform', `translate(0,${height})`)
       .call(xAxis)
 
-    chart.append('g')
+    svg.append('g')
       .attr('class', 'y axis')
       .call(yAxis)
 
-    const bar = chart.selectAll('.bar')
-      .data(fakeData)
-      .enter().append('g')
-      .attr('class', function (d) {
-        return 'bar ' + d.class
-      })
-      .attr('transform', function (d) {
-        return 'translate(' + xRange(d.name) + ',0)'
-      })
+    const bar = svg.selectAll('.bar')
+      .data(computedData)
+      .join('g')
+      .attr('class', (d: Row) => `bar ${d.class}`)
+      .attr('transform', (d: Row) => `translate(${x(d.name)},0)`)
 
     bar.append('rect')
-      .attr('y', function (d) {
-        return yRange(Math.max(d.start!, d.end!))
-      })
-      .attr('height', function (d) {
-        return Math.abs(yRange(d.start!) - yRange(d.end!))
-      })
-      .attr('width', xRange.bandwidth)
+      .attr('y', (d: Row) => y(Math.max(d.start || 0, d.end || d.value)))
+      .attr('height', (d: Row) => Math.abs(y(d.start || 0) - y(d.end || d.value)))
+      .attr('width', x.bandwidth())
 
     bar.append('text')
-      .attr('x', xRange.bandwidth() / 2)
-      .attr('y', function (d) {
-        return yRange(d.end!) + 5
-      })
-      .attr('dy', function (d) {
-        return ((d.class == 'negative') ? '-' : '') + '.75em'
-      })
-      .text(function (d) {
-        return dollarFormatter(d.end! - d.start!)
-      })
+      .attr('x', x.bandwidth() / 2)
+      .attr('y', (d: Row) => y(d.end || d.value) + 5)
+      .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
+      .text((d: Row) => textFormatter(d))
 
-    bar.filter(function (d) {
-      return d.class != 'total'
-    }).append('line')
+    bar.filter((d: Row) => d.class !== 'total').append('line')
       .attr('class', 'connector')
-      .attr('x1', xRange.bandwidth() + 5)
-      .attr('y1', function (d) {
-        return yRange(d.end!)
-      })
-      .attr('x2', xRange.bandwidth() / (1 - padding) - 5)
-      .attr('y2', function (d) {
-        return yRange(d.end!)
-      })
+      .attr('x1', x.bandwidth() + 5)
+      .attr('y1', (d: Row) => y(d.end || d.value))
+      .attr('x2', x.bandwidth() / (1 - padding) - 5)
+      .attr('y2', (d: Row) => y(d.end || d.value))
 
-    function dollarFormatter(n: number) {
-      n = Math.round(n)
-      let result = '' + n
-      if (Math.abs(n) > 1000) {
-        result = Math.round(n / 1000) + 'K'
+
+    function textFormatter(row: Row) {
+      switch (config.label_type || vis.options.label_type.default) {
+        case 'value':
+          return `${row.rendered}`
+        case 'value_percentage':
+          return `${row.rendered} (${(row.percent * 100).toFixed(2)}%)`
+        default:
+          return ''
       }
-      return '$' + result
+
     }
 
     doneRendering()
