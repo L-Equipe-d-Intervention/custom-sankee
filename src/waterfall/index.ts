@@ -8,6 +8,7 @@ declare const looker: Looker
 
 interface Index extends VisualizationDefinition {
   svg?: any;
+  tooltip?: any
 }
 
 interface Row {
@@ -20,11 +21,13 @@ interface Row {
   class: string
 }
 
-function humanize(n: number): string {
+const LABEL_PLACEHOLDER = '(empty)'
+
+function humanize(n: number, rounded = 2): string {
   n = Math.round(n)
   let result = '' + n
   if (Math.abs(n) > 1000) {
-    result = Math.round(n / 1000) + ' K'
+    result = (n / 1000).toFixed(rounded) + ' K'
   }
   return result
 }
@@ -47,6 +50,11 @@ const vis: Index = {
         '#b57052',
         '#ed69af',
       ],
+    },
+    value_labels: {
+      type: 'boolean',
+      label: 'Value Labels',
+      default: true,
     },
     label_type: {
       default: 'value',
@@ -113,9 +121,26 @@ const vis: Index = {
         stroke: #000;
         shape-rendering: crispEdges;
       }
+      
+      .tooltip {
+        font-family: "Roboto", "Noto Sans", sans-serif;
+        position: absolute;
+        z-index: 10;
+        background-color: #333;
+        border: none;
+        border-radius: 5px;
+        padding: 12px;
+        text-align: left;
+        color: white;
+      }
       </style>
     `
     this.svg = d3.select(element).append('svg')
+    this.tooltip = d3.select(element).append('div')
+      .attr('class', 'tooltip')
+      .style('opacity', 0)
+      .style('visibility', 'hidden')
+      .text('a simple tooltip')
   },
   // Render in response to the data or settings changing
   updateAsync(data, element, config, queryResponse, _details, doneRendering) {
@@ -133,13 +158,6 @@ const vis: Index = {
     ) {
       return
     }
-
-    //  The standard d3.ScaleOrdinal<string, {}>, causes error
-    // `no-inferred-empty-object-type  Explicit type parameter needs to be provided to the function call`
-    // https://stackoverflow.com/questions/31564730/typescript-with-d3js-with-definitlytyped
-    // const color = d3
-    //   .scaleOrdinal<string, string>()
-    //   .range(config.color_range || vis.options.color_range.default);
 
     // const getColorFromSankeyNode = (node: { depth: number; name: string }) => {
     //   if (dimensions.length > node.depth) {
@@ -166,11 +184,16 @@ const vis: Index = {
       .range([height, 0])
 
     const xAxis = d3.axisBottom(xScale)
+      .tickSizeOuter(0)
+      .tickSizeInner(0)
 
     const yAxis = d3.axisLeft(yScale)
-      .tickFormat(d => humanize(Number(d)))
+      .ticks(6)
+      .tickFormat(d => humanize(Number(d), 0))
+      .tickSizeOuter(0)
+      .tickSizeInner(0)
 
-    const svg = this.svg
+    const body = this.svg
       .html('')
       .attr('width', element.clientWidth)
       .attr('height', element.clientHeight)
@@ -178,8 +201,6 @@ const vis: Index = {
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
-
-    // 0 dimension + X measures
     console.log('data', data)
     console.log('config', config)
     console.log('fields', queryResponse.fields)
@@ -199,7 +220,7 @@ const vis: Index = {
           const { value } = d[measure.name]
           const block = {
             value,
-            name: measure.label_short,
+            name: measure.label_short || LABEL_PLACEHOLDER,
             rendered: rendered || humanize(value),
             class: value >= 0 ? 'positive' : 'negative',
           }
@@ -211,7 +232,7 @@ const vis: Index = {
       const { value, rendered } = d[measure.name]
       const name = dimension_like.map(dimension => d[dimension.name].value).filter(Boolean).join(' - ')
       const block = {
-        name,
+        name: name || LABEL_PLACEHOLDER,
         value,
         rendered: rendered || humanize(value),
         start: cumulative,
@@ -235,25 +256,31 @@ const vis: Index = {
       })
     }
 
+    const min = d3.min(computedData, d => d.start || 0) || 0
+    const max = d3.max(computedData, d => d.end || d.value) || 0
+
     xScale.domain(computedData.map(d => d.name))
-    yScale.domain([
-      d3.min(computedData, d => d.start || 0) || 0,
-      d3.max(computedData, d => d.end || d.value) || 0,
-    ])
-      .interpolate(d3.interpolateRound)
+    yScale.domain([min, max]).interpolate(d3.interpolateRound)
 
-    svg.append('g')
+    body.append('g')
       .attr('class', 'x axis')
-      .attr('transform', `translate(0,${height})`)
+      .attr('transform', `translate(0,${height + 5})`)
       .call(xAxis)
+      .select('.domain')
+      .attr('stroke-width', 0)
 
-    svg.append('g')
+    body.append('g')
       .attr('class', 'y axis')
+      .style('transform', 'translateX(-10px)')
       .call(yAxis)
+      .select('.domain')
+      .attr('stroke-width', 0)
+
+    //.transition().duration(500).call(this.yAxis)
 
     if (config.show_gridlines) {
-      svg.selectAll('line.horizontalGrid')
-        .data(yScale.ticks())
+      body.selectAll('line.horizontalGrid')
+        .data(yScale.ticks(6))
         .join('line')
         .attr('class', 'horizontalGrid')
         .attr('x1', 0)
@@ -261,12 +288,12 @@ const vis: Index = {
         .attr('y1', (d: number) => yScale(d) + 0.5)
         .attr('y2', (d: number) => yScale(d) + 0.5)
         .attr('fill', 'none')
-        .attr('stroke', 'lightgrey')
+        .attr('stroke', '#E6E6E6')
         .attr('stroke-width', '1px')
         .attr('shape-rendering', 'crispEdges')
     }
 
-    const bar = svg.selectAll('.bar')
+    const bar = body.selectAll('.bar')
       .data(computedData)
       .join('g')
       .attr('class', (d: Row) => `bar ${d.class}`)
@@ -277,12 +304,45 @@ const vis: Index = {
       .attr('height', (d: Row) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
       .attr('width', xScale.bandwidth())
 
-    bar.append('text')
-      .attr('x', xScale.bandwidth() / 2)
-      .attr('y', (d: Row) => yScale(d.end || d.value) + 5)
-      .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
-      .text((d: Row) => textFormatter(d))
+    // LABELS
+    if (config.value_labels) {
+      bar.append('text')
+        .attr('x', xScale.bandwidth() / 2)
+        .attr('y', (d: Row) => yScale(d.end || d.value) + 5)
+        .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
+        .text((d: Row) => textFormatter(d))
+    }
 
+    // TOOLTIP
+    const mouseover = (event: MouseEvent, d: Row) => {
+      this.tooltip.transition()
+        .duration(200)
+        .style('opacity', 1)
+        .style('visibility', 'visible')
+      this.tooltip.html(`${textFormatter(d)}`)
+        .style('left', `${event.pageX + 10}px`)
+        .style('top', `${event.pageY + 10}px`)
+    }
+
+    const mousemove = (event: MouseEvent) => {
+      this.tooltip
+        .style('left', `${event.pageX + 10}px`)
+        .style('top', `${event.pageY + 10}px`)
+    }
+
+    const mouseleave = () => {
+      this.tooltip.transition()
+        .duration(200)
+        .style('opacity', 0)
+        .style('visibility', 'hidden')
+    }
+
+    bar
+      .on('mouseover', mouseover)
+      .on('mousemove', mousemove)
+      .on('mouseleave', mouseleave)
+
+    // IN-BETWEEN BLOCK LINES
     if (config.show_lines_between_blocks) {
       bar.filter((d: Row) => d.class !== 'total').append('line')
         .attr('class', 'connector')
@@ -291,7 +351,6 @@ const vis: Index = {
         .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
         .attr('y2', (d: Row) => yScale(d.end || d.value))
     }
-
 
     function textFormatter(row: Row) {
       switch (config.label_type || vis.options.label_type.default) {
