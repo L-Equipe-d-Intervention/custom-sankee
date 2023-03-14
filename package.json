@@ -7,17 +7,21 @@
     "dev": "vite",
     "serve": "http-server ./dist -S -C cert.pem",
     "build:sankey": "tsc && VITE_VIZ_NAME=sankey vite build",
-    "build:waterfall": "tsc && VITE_VIZ_NAME=waterfall vite build"
+    "build:waterfall": "tsc && VITE_VIZ_NAME=waterfall vite build",
+    "build:weighted-tree": "tsc && VITE_VIZ_NAME=weighted-tree vite build"
   },
   "devDependencies": {
     "http-server": "^14.1.1",
     "typescript": "^4.9.3",
-    "vite": "^4.1.0"
+    "vite": "^4.1.0",
+    "vite-plugin-css-injected-by-js": "^3.0.1"
   },
   "dependencies": {
     "@types/d3": "^7.4.0",
     "@types/d3-sankey": "^0.12.1",
     "d3": "^7.8.2",
-    "d3-sankey": "^0.12.1"
+    "d3-sankey": "^0.12.1",
+    "d3-v4": "npm:d3@4",
+    "d3-v5": "npm:d3@5"
   }
 }

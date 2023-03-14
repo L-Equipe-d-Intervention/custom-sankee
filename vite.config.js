@@ -1,9 +1,10 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv } from "vite";
+import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 import { resolve } from "path";
 
 export default ({ mode }) => {
-  const env = {...process.env, ...loadEnv(mode, process.cwd(), "")};
-  const VIZ_NAME = env.VITE_VIZ_NAME
+  const env = { ...process.env, ...loadEnv(mode, process.cwd(), "") };
+  const VIZ_NAME = env.VITE_VIZ_NAME;
 
   return defineConfig({
     build: {
@@ -18,5 +19,6 @@ export default ({ mode }) => {
         },
       },
     },
+    plugins: [cssInjectedByJsPlugin()],
   });
-}
+};
