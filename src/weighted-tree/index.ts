@@ -1,8 +1,8 @@
 import WeightedTree from "./vizuly/WeightedTree";
-import * as d3 from "d3-v5";
 import "./vizuly/vizuly.css";
+import * as d3 from "d3-v5";
 import { handleErrors } from "../utils";
-// import colors from "../colors.json";
+import colors from "../colors.csv";
 
 import { Looker, VisualizationDefinition } from "../types";
 import nestTree from "./nestTree";
@@ -15,10 +15,11 @@ interface Index extends VisualizationDefinition {
   viz?: any;
 }
 
+const formatter = Intl.NumberFormat("en", { notation: "compact" });
+
 // Used to format data tip values
 function formatValue(d: number) {
-  if (isNaN(d)) d = 0;
-  return "$" + d3.format(",.2f")(d) + " Billion";
+  return formatter.format(d);
 }
 
 // Used to trim node labels so they are not too long.
@@ -60,22 +61,6 @@ const vis: Index = {
         "#ed69af",
       ],
     },
-    label_type: {
-      default: "name",
-      display: "select",
-      label: "Label Type",
-      type: "string",
-      values: [
-        { Name: "name" },
-        { "Name (value)": "name_value" },
-        { "Name: value (percentage)": "name_value_percentage" },
-      ],
-    },
-    show_null_points: {
-      type: "boolean",
-      label: "Plot Null Values",
-      default: true,
-    },
   },
   // Set up the initial state of the visualization
   create(element) {
@@ -94,15 +79,15 @@ const vis: Index = {
       .on("click", onClick);
   },
   // Render in response to the data or settings changing
-  updateAsync(data, _element, _config, queryResponse, _details, doneRendering) {
+  updateAsync(data, _element, config, queryResponse, _details, doneRendering) {
     if (
       !handleErrors(this, queryResponse, {
         min_pivots: 0,
         max_pivots: 0,
         min_dimensions: 2,
         max_dimensions: undefined,
-        min_measures: undefined,
-        max_measures: 0,
+        min_measures: 1,
+        max_measures: 1,
       })
     )
       return;
@@ -110,25 +95,55 @@ const vis: Index = {
     const dimensions = queryResponse.fields.dimension_like;
     const dimensionNames = dimensions.map((d) => d.name);
     const category = dimensions[dimensions.length - 1].name;
-    // const measure = queryResponse.fields.measure_like[0];
+    const measure = queryResponse.fields.measure_like[0];
+
+    const d3ColorFunction = d3
+      .scaleOrdinal()
+      .range(config.color_range || vis.options.color_range.default);
+
+    const getColorFromNode = (node: { dimensionName: string; key: string }) => {
+      if (node.dimensionName && node.key) {
+        const color = colors.find(
+          (color: { dimensionName: string; dimensionValue: string }) => {
+            return (
+              node.dimensionName.endsWith(color.dimensionName) &&
+              color.dimensionValue === node.key
+            );
+          }
+        );
+        if (color) {
+          return color.colorCode;
+        }
+      }
+      return d3ColorFunction(`${node.dimensionName}.${node.key}`);
+    };
 
     const nestedData = {
       key: "Overall",
-      values: nestTree(dimensionNames, data),
+      values: nestTree(dimensionNames, data, measure.name),
     };
     this.viz
       .data(nestedData)
       .key(function (d: any) {
         return d.key || d[category]?.value;
       })
-      .value(function () {
-        return Math.random();
+      .value(function (d: any) {
+        return d[measure.name]?.value ?? 0;
       })
       .label(function (d: any) {
         return trimLabel(d.key || d[category]?.value);
       })
       .dataTipLabel(function (d: any) {
         return d.key || d[category]?.value;
+      })
+      .style("link-stroke", function (d: any) {
+        return getColorFromNode(d.target.data);
+      })
+      .style("node-fill", function (d: any) {
+        return getColorFromNode(d.data);
+      })
+      .style("node-stroke", function (d: any) {
+        return getColorFromNode(d.data);
       });
 
     this.viz.update();
