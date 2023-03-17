@@ -230,7 +230,7 @@ const vis: Index = {
     console.log('measure', measure)
     const hasNoDimensions = dimension_like.length <= 0
     const hasOneMeasureOnly = measure_like.length === 1
-    const baseTotal = hasBaseMeasure ? data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0) : 0
+    const baseTotal = hasBaseMeasure ? d3.reduce(data, (cum, m) => cum + m[baseMeasure.name].value, 0) : 0
     const total = baseTotal + d3.sum(data, (d) => d[measure.name]['value'])
 
     // Transform data (i.e., finding cumulative values and total) for easier charting
@@ -313,19 +313,16 @@ const vis: Index = {
 
     body.append('g')
       .attr('class', 'y axis')
-      .style('transform', 'translateX(-10px)')
       .call(yAxis)
       .select('.domain')
       .attr('stroke-width', 0)
-
-    //.transition().duration(500).call(this.yAxis)
 
     if (config.show_gridlines) {
       body.selectAll('line.horizontalGrid')
         .data(yScale.ticks(6))
         .join('line')
         .attr('class', 'horizontalGrid')
-        .attr('x1', 0)
+        .attr('x1', 10)
         .attr('x2', width)
         .attr('y1', (d: number) => yScale(d) + 0.5)
         .attr('y2', (d: number) => yScale(d) + 0.5)
