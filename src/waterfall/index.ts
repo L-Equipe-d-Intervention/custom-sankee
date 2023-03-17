@@ -11,7 +11,7 @@ interface Index extends VisualizationDefinition {
   tooltip?: any
 }
 
-interface Row {
+interface Block {
   name: string
   value: number
   percent?: number
@@ -235,12 +235,12 @@ const vis: Index = {
 
     // Transform data (i.e., finding cumulative values and total) for easier charting
     let cumulative = 0
-    const computedData: Row[] = []
+    const computedData: Block[] = []
     data.forEach((d, i, data) => {
       if (hasNoDimensions) {
         measure_like.forEach(measure => {
           const { value } = d[measure.name]
-          const block = {
+          const block: Block = {
             value,
             name: measure.label_short || LABEL_PLACEHOLDER,
             rendered: rendered || humanize(value),
@@ -255,7 +255,7 @@ const vis: Index = {
       if (hasBaseMeasure && i === 0) {
         const value = data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0)
         // Compute base measure prior to waterfall
-        const block = {
+        const block: Block = {
           value,
           name: baseMeasure.field_group_variant,
           rendered: humanize(value),
@@ -271,7 +271,7 @@ const vis: Index = {
 
       const { value, rendered } = d[measure.name]
       const name = dimension_like.map(dimension => d[dimension.name].value).filter(Boolean).join(' - ')
-      const block = {
+      const block: Block = {
         name: name || LABEL_PLACEHOLDER,
         value,
         rendered: rendered || humanize(value),
@@ -335,25 +335,25 @@ const vis: Index = {
     const bar = body.selectAll('.bar')
       .data(computedData)
       .join('g')
-      .attr('class', (d: Row) => `bar ${d.class}`)
-      .attr('transform', (d: Row) => `translate(${xScale(d.name)},0)`)
+      .attr('class', (d: Block) => `bar ${d.class}`)
+      .attr('transform', (d: Block) => `translate(${xScale(d.name)},0)`)
 
     bar.append('rect')
-      .attr('y', (d: Row) => yScale(Math.max(d.start || 0, d.end || d.value)))
-      .attr('height', (d: Row) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
+      .attr('y', (d: Block) => yScale(Math.max(d.start || 0, d.end || d.value)))
+      .attr('height', (d: Block) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
       .attr('width', xScale.bandwidth())
 
     // LABELS
     if (config.value_labels) {
       bar.append('text')
         .attr('x', xScale.bandwidth() / 2)
-        .attr('y', (d: Row) => yScale(d.end || d.value) + 5)
-        .attr('dy', (d: Row) => ((d.class == 'negative') ? '-' : '') + '.75em')
-        .text((d: Row) => textFormatter(d))
+        .attr('y', (d: Block) => yScale(d.end || d.value) + 5)
+        .attr('dy', (d: Block) => ((d.class == 'negative') ? '-' : '') + '.75em')
+        .text((d: Block) => textFormatter(d))
     }
 
     // TOOLTIP
-    const mouseover = (event: MouseEvent, d: Row) => {
+    const mouseover = (event: MouseEvent, d: Block) => {
       this.tooltip.transition()
         .duration(200)
         .style('opacity', 1)
@@ -383,15 +383,15 @@ const vis: Index = {
 
     // IN-BETWEEN BLOCK LINES
     if (config.show_lines_between_blocks) {
-      bar.filter((d: Row) => d.class !== 'total').append('line')
+      bar.filter((d: Block) => d.class !== 'total').append('line')
         .attr('class', 'connector')
         .attr('x1', xScale.bandwidth() + 5)
-        .attr('y1', (d: Row) => yScale(d.end || d.value))
+        .attr('y1', (d: Block) => yScale(d.end || d.value))
         .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
-        .attr('y2', (d: Row) => yScale(d.end || d.value))
+        .attr('y2', (d: Block) => yScale(d.end || d.value))
     }
 
-    function textFormatter(row: Row): string {
+    function textFormatter(row: Block): string {
       switch (config.label_type || vis.options.label_type.default) {
         case 'value':
           return `${row.rendered}`
