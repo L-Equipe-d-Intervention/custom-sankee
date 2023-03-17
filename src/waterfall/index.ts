@@ -18,6 +18,7 @@ interface Row {
   rendered: string | Cell
   start?: number
   end?: number
+  tooltipLabel: string
   class: string
 }
 
@@ -25,11 +26,20 @@ const LABEL_PLACEHOLDER = '(empty)'
 
 function humanize(n: number, rounded = 2): string {
   n = Math.round(n)
-  let result = '' + n
-  if (Math.abs(n) > 1000) {
-    result = (n / 1000).toFixed(rounded) + ' K'
+  if (Math.abs(n) > 1000000) {
+    return (n / 1000000).toFixed(2) + 'M'
   }
-  return result
+  if (Math.abs(n) > 1000) {
+    return (n / 1000).toFixed(rounded) + ' K'
+  }
+  return n.toString()
+}
+
+function getTooltipHtml(measureName: string, count: string) {
+  return `
+    <div class="title">${measureName}</div>
+    <div class="count">${count}</div>
+  `
 }
 
 const vis: Index = {
@@ -86,15 +96,12 @@ const vis: Index = {
   create(element) {
     element.innerHTML = `
       <style>
-      .bar.total rect {
-        fill: steelblue;
+      .bar rect {
+        fill: #b7b4b4;
       }
       
-      .bar.positive rect {
-        fill: darkolivegreen;
-      }
-      .bar.negative rect {
-        fill: crimson;
+      .bar.total rect {
+        fill: steelblue;
       }
       
       .bar line.connector {
@@ -122,8 +129,15 @@ const vis: Index = {
         shape-rendering: crispEdges;
       }
       
+      .axis.x text {
+        /*transform: rotateZ(-45deg);*/
+        /*transform-origin: 100% 12px;*/
+        /*z-index: 9999;*/
+      } 
+      
       .tooltip {
         font-family: "Roboto", "Noto Sans", sans-serif;
+        font-size: 0.75rem;
         position: absolute;
         z-index: 10;
         background-color: #333;
@@ -132,6 +146,10 @@ const vis: Index = {
         padding: 12px;
         text-align: left;
         color: white;
+      }
+      
+      .tooltip .title {
+        font-weight: 800;
       }
       </style>
     `
@@ -145,7 +163,7 @@ const vis: Index = {
   // Render in response to the data or settings changing
   updateAsync(data, element, config, queryResponse, _details, doneRendering) {
     const { dimensions } = config.query_fields
-    const max_measures = dimensions.length > 0 ? 1 : undefined
+    const max_measures = dimensions.length > 0 ? 2 : undefined
 
     if (
       !handleErrors(this, queryResponse, {
@@ -206,16 +224,20 @@ const vis: Index = {
     console.log('fields', queryResponse.fields)
     const { dimension_like } = queryResponse.fields
     const { measure_like } = queryResponse.fields
-    const [measure] = measure_like
-    const noDimensions = dimension_like.length <= 0
-    const oneMeasureOnly = measure_like.length === 1
-    const total = d3.sum(data, (d) => d[measure.name]['value'])
+    const hasBaseMeasure = measure_like.length === 2
+    const [baseMeasure, measure] = hasBaseMeasure ? measure_like : [undefined, measure_like[0]]
+    console.log('base measure', baseMeasure)
+    console.log('measure', measure)
+    const hasNoDimensions = dimension_like.length <= 0
+    const hasOneMeasureOnly = measure_like.length === 1
+    const baseTotal = hasBaseMeasure ? data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0) : 0
+    const total = baseTotal + d3.sum(data, (d) => d[measure.name]['value'])
 
     // Transform data (i.e., finding cumulative values and total) for easier charting
     let cumulative = 0
     const computedData: Row[] = []
-    data.forEach(d => {
-      if (noDimensions) {
+    data.forEach((d, i, data) => {
+      if (hasNoDimensions) {
         measure_like.forEach(measure => {
           const { value } = d[measure.name]
           const block = {
@@ -223,10 +245,28 @@ const vis: Index = {
             name: measure.label_short || LABEL_PLACEHOLDER,
             rendered: rendered || humanize(value),
             class: value >= 0 ? 'positive' : 'negative',
+            tooltipLabel: measure.label,
           }
           computedData.push(block)
         })
         return
+      }
+
+      if (hasBaseMeasure && i === 0) {
+        const value = data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0)
+        // Compute base measure prior to waterfall
+        const block = {
+          value,
+          name: baseMeasure.field_group_variant,
+          rendered: humanize(value),
+          start: 0,
+          end: value,
+          percent: value / total,
+          tooltipLabel: baseMeasure.field_group_variant,
+          class: 'positive'
+        }
+        computedData.push(block)
+        cumulative += value
       }
 
       const { value, rendered } = d[measure.name]
@@ -238,6 +278,7 @@ const vis: Index = {
         start: cumulative,
         end: cumulative + value,
         percent: value / total,
+        tooltipLabel: measure.field_group_variant,
         class: value >= 0 ? 'positive' : 'negative',
       }
       cumulative += value
@@ -245,13 +286,14 @@ const vis: Index = {
       computedData.push(block)
     })
 
-    if (oneMeasureOnly) {
+    if (hasOneMeasureOnly) {
       computedData.push({
         name: 'Total',
         value: cumulative,
         rendered: humanize(cumulative),
         start: 0,
         end: cumulative,
+        tooltipLabel: 'Total',
         class: 'total',
       })
     }
@@ -319,7 +361,7 @@ const vis: Index = {
         .duration(200)
         .style('opacity', 1)
         .style('visibility', 'visible')
-      this.tooltip.html(`${textFormatter(d)}`)
+      this.tooltip.html(`${getTooltipHtml(d.tooltipLabel, textFormatter(d))}`)
         .style('left', `${event.pageX + 10}px`)
         .style('top', `${event.pageY + 10}px`)
     }
@@ -352,13 +394,13 @@ const vis: Index = {
         .attr('y2', (d: Row) => yScale(d.end || d.value))
     }
 
-    function textFormatter(row: Row) {
+    function textFormatter(row: Row): string {
       switch (config.label_type || vis.options.label_type.default) {
         case 'value':
           return `${row.rendered}`
         case 'value_percentage':
           if (!row.percent) {
-            return row.rendered
+            return row.rendered.toString()
           }
           return `${row.rendered} (${(row.percent * 100).toFixed(2)}%)`
         default:
