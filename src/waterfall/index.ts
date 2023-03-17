@@ -19,7 +19,7 @@ interface Block {
   start?: number
   end?: number
   tooltipLabel: string
-  class: string
+  color: string
 }
 
 const LABEL_PLACEHOLDER = '(empty)'
@@ -96,10 +96,6 @@ const vis: Index = {
   create(element) {
     element.innerHTML = `
       <style>
-      .bar rect {
-        fill: #b7b4b4;
-      }
-      
       .bar.total rect {
         fill: steelblue;
       }
@@ -230,6 +226,7 @@ const vis: Index = {
     console.log('measure', measure)
     const hasNoDimensions = dimension_like.length <= 0
     const hasOneMeasureOnly = measure_like.length === 1
+    const displayTotal = hasBaseMeasure || hasOneMeasureOnly
     const baseTotal = hasBaseMeasure ? d3.reduce(data, (cum, m) => cum + m[baseMeasure.name].value, 0) : 0
     const total = baseTotal + d3.sum(data, (d) => d[measure.name]['value'])
 
@@ -244,7 +241,7 @@ const vis: Index = {
             value,
             name: measure.label_short || LABEL_PLACEHOLDER,
             rendered: rendered || humanize(value),
-            class: value >= 0 ? 'positive' : 'negative',
+            color: '#dd45ff',
             tooltipLabel: measure.label,
           }
           computedData.push(block)
@@ -263,7 +260,7 @@ const vis: Index = {
           end: value,
           percent: value / total,
           tooltipLabel: baseMeasure.field_group_variant,
-          class: 'positive'
+          color: '#15c75d',
         }
         computedData.push(block)
         cumulative += value
@@ -279,14 +276,14 @@ const vis: Index = {
         end: cumulative + value,
         percent: value / total,
         tooltipLabel: measure.field_group_variant,
-        class: value >= 0 ? 'positive' : 'negative',
+        color: '#1255ff',
       }
       cumulative += value
 
       computedData.push(block)
     })
 
-    if (hasOneMeasureOnly) {
+    if (displayTotal) {
       computedData.push({
         name: 'Total',
         value: cumulative,
@@ -294,7 +291,7 @@ const vis: Index = {
         start: 0,
         end: cumulative,
         tooltipLabel: 'Total',
-        class: 'total',
+        color: 'steelblue',
       })
     }
 
@@ -335,7 +332,8 @@ const vis: Index = {
     const bar = body.selectAll('.bar')
       .data(computedData)
       .join('g')
-      .attr('class', (d: Block) => `bar ${d.class}`)
+      .attr('class', 'bar')
+      .style('fill', (d: Block) => d.color)
       .attr('transform', (d: Block) => `translate(${xScale(d.name)},0)`)
 
     bar.append('rect')
@@ -348,7 +346,7 @@ const vis: Index = {
       bar.append('text')
         .attr('x', xScale.bandwidth() / 2)
         .attr('y', (d: Block) => yScale(d.end || d.value) + 5)
-        .attr('dy', (d: Block) => ((d.class == 'negative') ? '-' : '') + '.75em')
+        .attr('dy', (d: Block) => ((d.color == 'negative') ? '-' : '') + '.75em')
         .text((d: Block) => textFormatter(d))
     }
 
@@ -383,7 +381,7 @@ const vis: Index = {
 
     // IN-BETWEEN BLOCK LINES
     if (config.show_lines_between_blocks) {
-      bar.filter((d: Block) => d.class !== 'total').append('line')
+      bar.filter((d: Block) => d.color !== 'total').append('line')
         .attr('class', 'connector')
         .attr('x1', xScale.bandwidth() + 5)
         .attr('y1', (d: Block) => yScale(d.end || d.value))
