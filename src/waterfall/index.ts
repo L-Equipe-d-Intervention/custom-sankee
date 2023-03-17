@@ -2,6 +2,7 @@ import * as d3 from 'd3'
 import { handleErrors } from '../utils'
 // import colors from '../colors.json'
 import { Cell, Looker, VisualizationDefinition } from '../types'
+import colors from '../colors.csv'
 
 // Global values provided via the API
 declare const looker: Looker
@@ -42,6 +43,9 @@ function getTooltipHtml(measureName: string, count: string) {
   `
 }
 
+// TODO:
+// Add color customization for total and baseline
+// Add option to choose between SUM or NOT for baseline value when there is
 const vis: Index = {
   id: 'custom_waterfall', // id/label not required, but nice for testing and keeping manifests in sync
   label: 'mROI Waterfall',
@@ -173,17 +177,26 @@ const vis: Index = {
       return
     }
 
-    // const getColorFromSankeyNode = (node: { depth: number; name: string }) => {
-    //   if (dimensions.length > node.depth) {
-    //     const dimensionKey = dimensions[node.depth].name as keyof typeof colors;
-    //     const dimensionColors = colors[dimensionKey];
-    //     const dimensionValue = node.name as keyof typeof dimensionColors;
-    //     if (colors[dimensionKey] && colors[dimensionKey][dimensionValue]) {
-    //       return colors[dimensionKey][dimensionValue];
-    //     }
-    //   }
-    //   return color(node.name);
-    // };
+    const d3ColorFunction = d3
+      .scaleOrdinal()
+      .range(config.color_range || vis.options.color_range.default)
+
+    const getColorForNode = (node: { dimensionName: string; key: string }) => {
+      if (node.dimensionName && node.key) {
+        const color = colors.find(
+          (color: { dimensionName: string; dimensionValue: string }) => {
+            return (
+              node.dimensionName.endsWith(color.dimensionName) &&
+              color.dimensionValue === node.key
+            )
+          },
+        )
+        if (color) {
+          return color.colorCode
+        }
+      }
+      return d3ColorFunction(`${node.dimensionName}.${node.key}`)
+    }
 
     const margin = { top: 20, right: 30, bottom: 20, left: 40 }
     const width = element.clientWidth - margin.left - margin.right
@@ -221,7 +234,9 @@ const vis: Index = {
     const { dimension_like } = queryResponse.fields
     const { measure_like } = queryResponse.fields
     const hasBaseMeasure = measure_like.length === 2
+    const [baseDimension] = dimension_like
     const [baseMeasure, measure] = hasBaseMeasure ? measure_like : [undefined, measure_like[0]]
+    console.log('base dimension', baseDimension)
     console.log('base measure', baseMeasure)
     console.log('measure', measure)
     const hasNoDimensions = dimension_like.length <= 0
@@ -251,7 +266,7 @@ const vis: Index = {
 
       if (hasBaseMeasure && i === 0) {
         const value = data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0)
-        // Compute base measure prior to waterfall
+        // Compute baseline measure prior to sub waterfall
         const block: Block = {
           value,
           name: baseMeasure.field_group_variant,
@@ -260,13 +275,14 @@ const vis: Index = {
           end: value,
           percent: value / total,
           tooltipLabel: baseMeasure.field_group_variant,
-          color: '#15c75d',
+          color: '#c71515',
         }
         computedData.push(block)
         cumulative += value
       }
 
       const { value, rendered } = d[measure.name]
+      // Concatenating all dimensions name for the label
       const name = dimension_like.map(dimension => d[dimension.name].value).filter(Boolean).join(' - ')
       const block: Block = {
         name: name || LABEL_PLACEHOLDER,
@@ -276,11 +292,10 @@ const vis: Index = {
         end: cumulative + value,
         percent: value / total,
         tooltipLabel: measure.field_group_variant,
-        color: '#1255ff',
+        color: getColorForNode({ dimensionName: baseDimension.name, key: d[baseDimension.name].value }),
       }
-      cumulative += value
-
       computedData.push(block)
+      cumulative += value
     })
 
     if (displayTotal) {
