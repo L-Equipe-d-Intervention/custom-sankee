@@ -1,52 +1,14 @@
 import * as d3 from 'd3'
 import { handleErrors } from '../utils'
 // import colors from '../colors.json'
-import { Cell, Looker, VisualizationDefinition } from '../types'
+import { Bar, Looker, Waterfall } from '../types'
 import colors from '../colors.csv'
+import { computeData, getTooltipHtml, humanize, textFormatter } from './utils'
 
 // Global values provided via the API
 declare const looker: Looker
 
-interface Index extends VisualizationDefinition {
-  svg?: any;
-  tooltip?: any
-}
-
-interface Block {
-  name: string
-  value: number
-  percent?: number
-  rendered: string | Cell
-  start?: number
-  end?: number
-  tooltipLabel: string
-  color: string
-}
-
-const LABEL_PLACEHOLDER = '(empty)'
-
-function humanize(n: number, rounded = 2): string {
-  n = Math.round(n)
-  if (Math.abs(n) > 1000000) {
-    return (n / 1000000).toFixed(2) + 'M'
-  }
-  if (Math.abs(n) > 1000) {
-    return (n / 1000).toFixed(rounded) + ' K'
-  }
-  return n.toString()
-}
-
-function getTooltipHtml(measureName: string, count: string) {
-  return `
-    <div class="title">${measureName}</div>
-    <div class="count">${count}</div>
-  `
-}
-
-// TODO:
-// Add color customization for total and baseline
-// Add option to choose between SUM or NOT for baseline value when there is
-const vis: Index = {
+const vis: Waterfall = {
   id: 'custom_waterfall', // id/label not required, but nice for testing and keeping manifests in sync
   label: 'mROI Waterfall',
   options: {
@@ -64,6 +26,18 @@ const vis: Index = {
         '#b57052',
         '#ed69af',
       ],
+    },
+    baseline_color: {
+      type: 'string',
+      label: 'Baseline color',
+      display: 'colors',
+      default: '#c71515'
+    },
+    total_color: {
+      type: 'string',
+      label: 'Total color',
+      display: 'colors',
+      default: 'steelblue'
     },
     value_labels: {
       type: 'boolean',
@@ -90,9 +64,9 @@ const vis: Index = {
       label: 'Lines between blocks',
       default: true,
     },
-    show_null_points: {
+    sum_for_baseline: {
       type: 'boolean',
-      label: 'Plot Null Values',
+      label: 'Compute SUM for baseline measure',
       default: true,
     },
   },
@@ -111,8 +85,9 @@ const vis: Index = {
       }
       
       .bar text {
-        fill: white;
+        fill: black;
         font: 12px sans-serif;
+        font-weight: bold;
         text-anchor: middle;
       }
       
@@ -133,7 +108,12 @@ const vis: Index = {
         /*transform: rotateZ(-45deg);*/
         /*transform-origin: 100% 12px;*/
         /*z-index: 9999;*/
-      } 
+      }
+      
+      text.axis-name {
+        font-family: Roboto, "Noto Sans", sans-serif;
+        font-size: 12px;
+      }
       
       .tooltip {
         font-family: "Roboto", "Noto Sans", sans-serif;
@@ -162,6 +142,9 @@ const vis: Index = {
   },
   // Render in response to the data or settings changing
   updateAsync(data, element, config, queryResponse, _details, doneRendering) {
+    console.log('data', data)
+    console.log('config', config)
+    console.log('fields', queryResponse.fields)
     const { dimensions } = config.query_fields
     const max_measures = dimensions.length > 0 ? 2 : undefined
 
@@ -177,6 +160,7 @@ const vis: Index = {
       return
     }
 
+    // UTILS
     const d3ColorFunction = d3
       .scaleOrdinal()
       .range(config.color_range || vis.options.color_range.default)
@@ -198,139 +182,96 @@ const vis: Index = {
       return d3ColorFunction(`${node.dimensionName}.${node.key}`)
     }
 
-    const margin = { top: 20, right: 30, bottom: 20, left: 40 }
-    const width = element.clientWidth - margin.left - margin.right
-    const height = element.clientHeight - margin.top - margin.bottom
-    const padding = 0.3
-
-    const xScale = d3.scaleBand()
-      .range([0, width])
-      .padding(padding)
-
-    const yScale = d3.scaleLinear()
-      .range([height, 0])
-
-    const xAxis = d3.axisBottom(xScale)
-      .tickSizeOuter(0)
-      .tickSizeInner(0)
-
-    const yAxis = d3.axisLeft(yScale)
-      .ticks(6)
-      .tickFormat(d => humanize(Number(d), 0))
-      .tickSizeOuter(0)
-      .tickSizeInner(0)
-
-    const body = this.svg
-      .html('')
-      .attr('width', element.clientWidth)
-      .attr('height', element.clientHeight)
-      .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-      .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`)
-
-    console.log('data', data)
-    console.log('config', config)
-    console.log('fields', queryResponse.fields)
-    const { dimension_like } = queryResponse.fields
-    const { measure_like } = queryResponse.fields
+    // DATA PROCESSING
+    const { dimension_like, measure_like } = queryResponse.fields
     const hasBaseMeasure = measure_like.length === 2
     const [baseDimension] = dimension_like
     const [baseMeasure, measure] = hasBaseMeasure ? measure_like : [undefined, measure_like[0]]
     console.log('base dimension', baseDimension)
     console.log('base measure', baseMeasure)
     console.log('measure', measure)
-    const hasNoDimensions = dimension_like.length <= 0
-    const hasOneMeasureOnly = measure_like.length === 1
-    const displayTotal = hasBaseMeasure || hasOneMeasureOnly
-    const baseTotal = hasBaseMeasure ? d3.reduce(data, (cum, m) => cum + m[baseMeasure.name].value, 0) : 0
-    const total = baseTotal + d3.sum(data, (d) => d[measure.name]['value'])
-
-    // Transform data (i.e., finding cumulative values and total) for easier charting
-    let cumulative = 0
-    const computedData: Block[] = []
-    data.forEach((d, i, data) => {
-      if (hasNoDimensions) {
-        measure_like.forEach(measure => {
-          const { value } = d[measure.name]
-          const block: Block = {
-            value,
-            name: measure.label_short || LABEL_PLACEHOLDER,
-            rendered: rendered || humanize(value),
-            color: '#dd45ff',
-            tooltipLabel: measure.label,
-          }
-          computedData.push(block)
-        })
-        return
-      }
-
-      if (hasBaseMeasure && i === 0) {
-        const value = data.reduce((cum, m) => cum + m[baseMeasure.name].value, 0)
-        // Compute baseline measure prior to sub waterfall
-        const block: Block = {
-          value,
-          name: baseMeasure.field_group_variant,
-          rendered: humanize(value),
-          start: 0,
-          end: value,
-          percent: value / total,
-          tooltipLabel: baseMeasure.field_group_variant,
-          color: '#c71515',
-        }
-        computedData.push(block)
-        cumulative += value
-      }
-
-      const { value, rendered } = d[measure.name]
-      // Concatenating all dimensions name for the label
-      const name = dimension_like.map(dimension => d[dimension.name].value).filter(Boolean).join(' - ')
-      const block: Block = {
-        name: name || LABEL_PLACEHOLDER,
-        value,
-        rendered: rendered || humanize(value),
-        start: cumulative,
-        end: cumulative + value,
-        percent: value / total,
-        tooltipLabel: measure.field_group_variant,
-        color: getColorForNode({ dimensionName: baseDimension.name, key: d[baseDimension.name].value }),
-      }
-      computedData.push(block)
-      cumulative += value
-    })
-
-    if (displayTotal) {
-      computedData.push({
-        name: 'Total',
-        value: cumulative,
-        rendered: humanize(cumulative),
-        start: 0,
-        end: cumulative,
-        tooltipLabel: 'Total',
-        color: 'steelblue',
-      })
-    }
-
+    const computedData = computeData(data, queryResponse, config)
     const min = d3.min(computedData, d => d.start || 0) || 0
     const max = d3.max(computedData, d => d.end || d.value) || 0
 
-    xScale.domain(computedData.map(d => d.name))
-    yScale.domain([min, max]).interpolate(d3.interpolateRound)
+    // SIZES
+    const margin = { top: 20, right: 30, bottom: 20, left: 40 }
+    const width = element.clientWidth - margin.left - margin.right
+    const height = element.clientHeight - margin.top - margin.bottom
+    const padding = 0.3
 
-    body.append('g')
+    // X AXIS
+    const xScale = d3.scaleBand()
+      .range([0, width])
+      .domain(computedData.map(d => d.name))
+      .padding(padding)
+
+    const xAxis = d3.axisBottom(xScale)
+      .tickSizeOuter(0)
+      .tickSizeInner(0)
+
+    // Y AXIS
+    const yScale = d3.scaleLinear()
+      .range([height, 0])
+      .domain([min, max]).interpolate(d3.interpolateRound)
+
+    const yAxis = d3.axisLeft(yScale)
+      .ticks(5)
+      .tickFormat(d => d === 0 ? '' : humanize(Number(d), 0))
+      .tickSizeOuter(0)
+      .tickSizeInner(0)
+
+    // CONTAINER
+    const chart = this.svg
+      .html('')
+      .attr('width', element.clientWidth)
+      .attr('height', element.clientHeight)
+      .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+      .append('g')
+      .attr('transform', `translate(${margin.left} ,${margin.top})`)
+
+    // ADDING X AXIS
+    const xAxisGroup = chart.append('g')
       .attr('class', 'x axis')
-      .attr('transform', `translate(0,${height + 5})`)
+      .attr('transform', `translate(0, ${yScale(0) + 5})`)
       .call(xAxis)
       .select('.domain')
       .attr('stroke-width', 0)
 
-    body.append('g')
+    // check for label overlaps
+    xAxisGroup.selectAll('text')
+      .style('text-anchor', 'end')
+      .attr('dx', '-0.8em')
+      .attr('dy', '-0.5em')
+      .attr('transform', 'rotate(-45)')
+
+    const xAxisHeight = xAxisGroup.node().getBBox().height
+
+    if (xAxisHeight > margin.bottom) {
+      xAxisGroup.selectAll('text')
+        .style('text-anchor', 'end')
+        .attr('dx', '-0.8em')
+        .attr('dy', '-0.5em')
+        .attr('transform', 'rotate(-45)')
+    }
+
+    // ADDING Y AXIS
+    chart.append('g')
       .attr('class', 'y axis')
       .call(yAxis)
       .select('.domain')
       .attr('stroke-width', 0)
 
+    // add Y axis name
+    this.svg.append('text')
+      .attr('class', 'y axis-name')
+      .attr('transform', `translate(${margin.left / 2},${height / 2}) rotate(-90)`)
+      .style('text-anchor', 'middle')
+      .text(baseDimension.field_group_variant);
+
+    // GRIDLINES
     if (config.show_gridlines) {
-      body.selectAll('line.horizontalGrid')
+      chart.selectAll('line.horizontalGrid')
         .data(yScale.ticks(6))
         .join('line')
         .attr('class', 'horizontalGrid')
@@ -344,34 +285,36 @@ const vis: Index = {
         .attr('shape-rendering', 'crispEdges')
     }
 
-    const bar = body.selectAll('.bar')
+    // DRAWING BARS
+    const bar = chart.selectAll('.bar')
       .data(computedData)
       .join('g')
       .attr('class', 'bar')
-      .style('fill', (d: Block) => d.color)
-      .attr('transform', (d: Block) => `translate(${xScale(d.name)},0)`)
+      .style('fill', (d: Bar) => d.color || getColorForNode({ dimensionName: baseDimension.name, key: d.id }))
+      .attr('transform', (d: Bar) => `translate(${xScale(d.name)},0)`)
 
     bar.append('rect')
-      .attr('y', (d: Block) => yScale(Math.max(d.start || 0, d.end || d.value)))
-      .attr('height', (d: Block) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
+      .attr('y', (d: Bar) => yScale(Math.max(d.start || 0, d.end || d.value)))
+      .attr('height', (d: Bar) => Math.abs(yScale(d.start || 0) - yScale(d.end || d.value)))
       .attr('width', xScale.bandwidth())
 
     // LABELS
     if (config.value_labels) {
       bar.append('text')
         .attr('x', xScale.bandwidth() / 2)
-        .attr('y', (d: Block) => yScale(d.end || d.value) + 5)
-        .attr('dy', (d: Block) => ((d.color == 'negative') ? '-' : '') + '.75em')
-        .text((d: Block) => textFormatter(d))
+        .attr('y', (d: Bar) => yScale(d.end || d.value) + 5)
+        // TODO: Put label above or under if bar is too small
+        .attr('dy', (d: Bar) => ((d.color == 'negative') ? '-' : '') + '.75em')
+        .text((d: Bar) => textFormatter(d, config.label_type))
     }
 
     // TOOLTIP
-    const mouseover = (event: MouseEvent, d: Block) => {
+    const mouseover = (event: MouseEvent, d: Bar) => {
       this.tooltip.transition()
         .duration(200)
         .style('opacity', 1)
         .style('visibility', 'visible')
-      this.tooltip.html(`${getTooltipHtml(d.tooltipLabel, textFormatter(d))}`)
+      this.tooltip.html(`${getTooltipHtml(d.tooltipLabel, textFormatter(d, config.label_type))}`)
         .style('left', `${event.pageX + 10}px`)
         .style('top', `${event.pageY + 10}px`)
     }
@@ -396,27 +339,12 @@ const vis: Index = {
 
     // IN-BETWEEN BLOCK LINES
     if (config.show_lines_between_blocks) {
-      bar.filter((d: Block) => d.color !== 'total').append('line')
+      bar.filter((d: Bar) => d.color !== 'total').append('line')
         .attr('class', 'connector')
         .attr('x1', xScale.bandwidth() + 5)
-        .attr('y1', (d: Block) => yScale(d.end || d.value))
+        .attr('y1', (d: Bar) => yScale(d.end || d.value))
         .attr('x2', xScale.bandwidth() / (1 - padding) - 5)
-        .attr('y2', (d: Block) => yScale(d.end || d.value))
-    }
-
-    function textFormatter(row: Block): string {
-      switch (config.label_type || vis.options.label_type.default) {
-        case 'value':
-          return `${row.rendered}`
-        case 'value_percentage':
-          if (!row.percent) {
-            return row.rendered.toString()
-          }
-          return `${row.rendered} (${(row.percent * 100).toFixed(2)}%)`
-        default:
-          return ''
-      }
-
+        .attr('y2', (d: Bar) => yScale(d.end || d.value))
     }
 
     doneRendering()

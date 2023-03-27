@@ -130,3 +130,20 @@ export interface VisualizationError {
   retryable?: boolean
   warning?: boolean
 }
+
+export interface Waterfall extends VisualizationDefinition {
+  svg?: any;
+  tooltip?: any
+}
+
+export interface Bar {
+  id: string
+  name: string
+  value: number
+  percent?: number
+  rendered: string | Cell
+  start: number
+  end: number
+  tooltipLabel: string
+  color?: string
+}
