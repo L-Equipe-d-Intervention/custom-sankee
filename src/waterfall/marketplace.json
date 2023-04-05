@@ -1,0 +1,19 @@
+{
+  "label": "Artefact's Custom Waterfall",
+  "category_label": "Visualizations",
+  "branding": {
+    "image_uri": "https://www.techforretail.com/wp-content/uploads/2021/07/artefact.png",
+    "tagline": "Artefact's Custom Waterfall"
+  },
+  "constants": {
+    "VIS_LABEL": {
+      "label": "Visualization Label",
+      "description": "This label will appear in the visualization selector in the Looker Explore UI."
+    },
+    "VIS_ID": {
+      "label": "Visualization ID",
+      "description": "This ID must be unique across all custom visualizations on your instance.",
+      "value_constraint": "visualization"
+    }
+  }
+}
