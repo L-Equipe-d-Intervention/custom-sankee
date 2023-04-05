@@ -27,18 +27,6 @@ const vis: Waterfall = {
         '#ed69af',
       ],
     },
-    baseline_color: {
-      type: 'string',
-      label: 'Baseline color',
-      display: 'colors',
-      default: '#c71515'
-    },
-    total_color: {
-      type: 'string',
-      label: 'Total color',
-      display: 'colors',
-      default: 'steelblue'
-    },
     value_labels: {
       type: 'boolean',
       label: 'Value Labels',
@@ -85,7 +73,7 @@ const vis: Waterfall = {
       }
       
       .bar text {
-        fill: black;
+        fill: #333333;
         font: 12px sans-serif;
         font-weight: bold;
         text-anchor: middle;
