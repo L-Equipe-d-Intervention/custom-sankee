@@ -251,11 +251,11 @@ const vis: Waterfall = {
       .attr('stroke-width', 0)
 
     // add Y axis name
-    this.svg.append('text')
-      .attr('class', 'y axis-name')
-      .attr('transform', `translate(${margin.left / 2},${height / 2}) rotate(-90)`)
-      .style('text-anchor', 'middle')
-      .text(baseDimension.field_group_variant);
+    // this.svg.append('text')
+    //   .attr('class', 'y axis-name')
+    //   .attr('transform', `translate(${margin.left / 2},${height / 2}) rotate(-90)`)
+    //   .style('text-anchor', 'middle')
+    //   .text(measure.field_group_variant);
 
     // GRIDLINES
     if (config.show_gridlines) {
